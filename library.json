@@ -1,0 +1,41 @@
+{
+    "name": "ESP32-DNSServerAsync",
+    "frameworks": "arduino",
+    "platforms": ["espressif32"],
+    "version": "0.0.1",
+    "keywords": "esp32, dns",
+    "description": "Async version of DNSServer for ESP32",
+    "url": "https://github.com/vortigont/ESP32-DNSServerAsync",
+    "authors": [
+        {
+            "name": "Emil Muratov",
+            "url": "https://github.com/vortigont",
+            "email": "gpm@hotplug.ru",
+            "maintainer": true
+        },
+        {
+            "name": "Kristijan Novoselić",
+            "email": "kristijan.novoselic@gmail.com"
+        }
+    ],
+    "license": "LGPL-2.1",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/vortigont/ESP32-DNSServerAsync.git"
+    },
+    "dependencies":
+    [
+        {"name": "AsyncUDP", "platforms": "espressif32"}
+    ],
+    "export": {
+        "include":
+        [
+            "examples/*",
+            "src/*",
+            "README.md",
+            "library.json",
+            "library.properties",
+            "LICENCE"
+        ]
+    }
+}
