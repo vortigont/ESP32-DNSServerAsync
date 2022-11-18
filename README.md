@@ -8,6 +8,7 @@ Untill(unless) it accepted this repo will be a test-lab for developing.
 
 
 ====
+
 Following bugfix #7475. Current implementation of DNSServer lib uses WiFiUDP which is not very efficient considering cpu/mem resources. It hooks to loop() for packet processing doing useless malloc's/free each run cycle.
 
 https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/src/WiFiUdp.cpp#L205-L221
@@ -29,8 +30,8 @@ This PR offers refactored DNSServer code based on bundled AsyncUDP lib and some 
 - removed some dynamically allocated members
 - other code cleanup
 
+
 Other known issues:
 
-    non A req's ain't handled properly, i.e. always reply with A type records
-    pkts with edns opt ain't handled properly, packets ignored due to additional RR's>1
-
+ - non A req's ain't handled properly, i.e. always reply with A type records
+ - pkts with edns opt ain't handled properly, packets ignored due to additional RR's>1
