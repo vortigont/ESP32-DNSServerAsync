@@ -1,4 +1,4 @@
-#include "DNSServer.h"
+#include "DNSServerAsync.h"
 #include <lwip/def.h>
 #include <Arduino.h>
 
