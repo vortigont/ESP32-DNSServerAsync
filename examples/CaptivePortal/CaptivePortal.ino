@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <DNSServer.h>
+#include <DNSServerAsync.h>
 
 const byte DNS_PORT = 53;
 IPAddress apIP(8,8,4,4); // The default android DNS
