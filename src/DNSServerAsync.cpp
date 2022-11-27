@@ -9,6 +9,8 @@
 #define DEBUG_OUTPUT Serial
 #endif
 
+#define DNS_MIN_REQ_LEN  17          // minimal size for DNS request asking ROOT = DNS_HEADER_SIZE + 1 null byte for Name + 4 bytes type/class
+
 DNSServer::DNSServer() : _port(0), _ttl(htonl(DNS_DEFAULT_TTL)), _errorReplyCode(DNSReplyCode::NonExistentDomain){}
 
 DNSServer::~DNSServer(){}
@@ -18,11 +20,11 @@ bool DNSServer::start(const uint16_t &port, const String &domainName,
 {
   _port = port;
   _domainName = domainName;
+  downcaseAndRemoveWwwPrefix(_domainName);
   _resolvedIP[0] = resolvedIP[0];
   _resolvedIP[1] = resolvedIP[1];
   _resolvedIP[2] = resolvedIP[2];
   _resolvedIP[3] = resolvedIP[3];
-  downcaseAndRemoveWwwPrefix(_domainName);
   _udp.close();
   _udp.onPacket([this](AsyncUDPPacket& pkt){ this->_handleUDP(pkt); });
   return _udp.listen(_port);
@@ -51,8 +53,7 @@ void DNSServer::downcaseAndRemoveWwwPrefix(String &domainName)
 
 void DNSServer::_handleUDP(AsyncUDPPacket& pkt)
 {
-  size_t currentPacketSize = pkt.length();
-  if (currentPacketSize < DNS_HEADER_SIZE) return;
+  if (pkt.length() < DNS_MIN_REQ_LEN) return;         // truncated packet or not a DNS req
 
   // get DNS header (beginning of message)
   DNSHeader dnsHeader;
@@ -67,7 +68,7 @@ void DNSServer::_handleUDP(AsyncUDPPacket& pkt)
       // Each label contains a byte to describe its length and the label itself. The list of 
       // labels terminates with a zero-valued byte. In "github.com", we have two labels "github" & "com"
 */
-      const char * enoflbls = strchr((const char*)pkt.data() + DNS_HEADER_SIZE, 0);   // find end_of_label marker
+      const char * enoflbls = strchr(reinterpret_cast<const char*>(pkt.data()) + DNS_HEADER_SIZE, 0);   // find end_of_label marker
       ++enoflbls;                                                               // advance after null terminator
       dnsQuestion.QName = pkt.data() + DNS_HEADER_SIZE;                         // we can reference labels from the request
       dnsQuestion.QNameLength = enoflbls - (char*)pkt.data() - DNS_HEADER_SIZE;
@@ -75,7 +76,7 @@ void DNSServer::_handleUDP(AsyncUDPPacket& pkt)
         check if we aint going out of pkt bounds
         proper dns req should have label terminator at least 4 bytes before end of packet
       */
-      if (dnsQuestion.QNameLength < 3 || dnsQuestion.QNameLength > currentPacketSize - DNS_HEADER_SIZE - sizeof(dnsQuestion.QType) - sizeof(dnsQuestion.QClass)) return;              // malformed packet
+      if (dnsQuestion.QNameLength > pkt.length() - DNS_HEADER_SIZE - sizeof(dnsQuestion.QType) - sizeof(dnsQuestion.QClass)) return;              // malformed packet
       
       // Copy the QType and QClass
       memcpy( &dnsQuestion.QType,  enoflbls, sizeof(dnsQuestion.QType) );
@@ -86,7 +87,7 @@ void DNSServer::_handleUDP(AsyncUDPPacket& pkt)
     if (dnsHeader.OPCode == DNS_OPCODE_QUERY &&
         requestIncludesOnlyOneQuestion(dnsHeader) &&
         (_domainName == "*" ||
-         getDomainNameWithoutWwwPrefix((const char*)pkt.data() + DNS_HEADER_SIZE, dnsQuestion.QNameLength) == _domainName)
+         getDomainNameWithoutWwwPrefix(static_cast<const unsigned char*>(dnsQuestion.QName), dnsQuestion.QNameLength) == _domainName)
        )
     {
       replyWithIP(pkt, dnsHeader, dnsQuestion);
@@ -106,14 +107,14 @@ bool DNSServer::requestIncludesOnlyOneQuestion(DNSHeader& dnsHeader)
 }
 
 
-String DNSServer::getDomainNameWithoutWwwPrefix(const char* start, size_t len)
+String DNSServer::getDomainNameWithoutWwwPrefix(const unsigned char* start, size_t len)
 {
   String parsedDomainName(start, --len);    // exclude trailing null byte from labels length, String constructor will add it anyway
 
   int pos = 0;
   while(pos<len)
   {
-    parsedDomainName.setCharAt(pos, 0x2e);  // replace len byte with dot char "."
+    parsedDomainName.setCharAt(pos, 0x2e);  // replace label len byte with dot char "."
     pos += *(start + pos);
     ++pos;
   }
@@ -157,17 +158,17 @@ void DNSServer::replyWithIP(AsyncUDPPacket& req, DNSHeader& dnsHeader, DNSQuesti
 
   #ifdef DEBUG_ESP_DNS
     DEBUG_OUTPUT.printf("DNS responds: %s for %s\n",
-            IPAddress(_resolvedIP).toString().c_str(), getDomainNameWithoutWwwPrefix((const char*)rpl.data() + DNS_HEADER_SIZE, dnsQuestion.QNameLength).c_str() );
+            IPAddress(_resolvedIP).toString().c_str(), getDomainNameWithoutWwwPrefix(static_cast<const unsigned char*>(dnsQuestion.QName), dnsQuestion.QNameLength).c_str() );
   #endif  
 }
 
 void DNSServer::replyWithCustomCode(AsyncUDPPacket& req, DNSHeader& dnsHeader)
 {
   dnsHeader.QR = DNS_QR_RESPONSE;
-  dnsHeader.RCode = (uint16_t)_errorReplyCode;
+  dnsHeader.RCode = static_cast<uint16_t>(_errorReplyCode);
   dnsHeader.QDCount = 0;
 
   AsyncUDPMessage rpl(sizeof(DNSHeader));
-  rpl.write((unsigned char*)&dnsHeader, sizeof(DNSHeader));
+  rpl.write(reinterpret_cast<const uint8_t*>(&dnsHeader), sizeof(DNSHeader));
   _udp.sendTo(rpl, req.remoteIP(), req.remotePort());
 }

@@ -106,7 +106,7 @@ class DNSServer
      * @param len labels length
      * @return String 
      */
-    String getDomainNameWithoutWwwPrefix(const char* start, size_t len);
+    String getDomainNameWithoutWwwPrefix(const unsigned char* start, size_t len);
     inline bool requestIncludesOnlyOneQuestion(DNSHeader& dnsHeader);
     void replyWithIP(AsyncUDPPacket& req, DNSHeader& dnsHeader, DNSQuestion& dnsQuestion);
     inline void replyWithCustomCode(AsyncUDPPacket& req, DNSHeader& dnsHeader);
