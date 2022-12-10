@@ -28,6 +28,7 @@ This PR offers refactored DNSServer code based on bundled AsyncUDP lib and some 
 - added sanity checks for mem bounds
 - optimize label/packet length calculations
 - removed some dynamically allocated members
+- refactored "Captive Portal" example, now it will display portal detection pop-up on Android, Windows, etc...
 - other code cleanup
 
 
