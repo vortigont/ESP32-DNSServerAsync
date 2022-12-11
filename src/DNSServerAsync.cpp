@@ -1,6 +1,8 @@
 #include "DNSServerAsync.h"
 #include <lwip/def.h>
 #include <Arduino.h>
+#include <WiFi.h>
+
 
 // #define DEBUG_ESP_DNS
 #ifdef DEBUG_ESP_PORT
@@ -11,20 +13,32 @@
 
 #define DNS_MIN_REQ_LEN  17          // minimal size for DNS request asking ROOT = DNS_HEADER_SIZE + 1 null byte for Name + 4 bytes type/class
 
-DNSServer::DNSServer() : _port(0), _ttl(htonl(DNS_DEFAULT_TTL)), _errorReplyCode(DNSReplyCode::NonExistentDomain){}
+DNSServer::DNSServer() : _port(DNS_DEFAULT_PORT), _ttl(htonl(DNS_DEFAULT_TTL)), _errorReplyCode(DNSReplyCode::NonExistentDomain){}
 
-DNSServer::~DNSServer(){}
+DNSServer::DNSServer(const String &domainName) : _port(DNS_DEFAULT_PORT), _ttl(htonl(DNS_DEFAULT_TTL)), _errorReplyCode(DNSReplyCode::NonExistentDomain), _domainName(domainName){};
+
+
+bool DNSServer::start(){
+  if (WiFi.getMode() & WIFI_AP){
+    _resolvedIP = WiFi.softAPIP();
+  } else return false;        // won't run if WiFi is not in AP mode
+
+  _udp.close();
+  _udp.onPacket([this](AsyncUDPPacket& pkt){ this->_handleUDP(pkt); });
+  return _udp.listen(_port);
+}
 
 bool DNSServer::start(const uint16_t &port, const String &domainName,
                      const IPAddress &resolvedIP)
 {
   _port = port;
-  _domainName = domainName;
-  downcaseAndRemoveWwwPrefix(_domainName);
-  _resolvedIP[0] = resolvedIP[0];
-  _resolvedIP[1] = resolvedIP[1];
-  _resolvedIP[2] = resolvedIP[2];
-  _resolvedIP[3] = resolvedIP[3];
+  if (domainName != "*"){
+    _domainName = domainName;
+    downcaseAndRemoveWwwPrefix(_domainName);
+  } else
+    _domainName.clear();
+
+  _resolvedIP = resolvedIP;
   _udp.close();
   _udp.onPacket([this](AsyncUDPPacket& pkt){ this->_handleUDP(pkt); });
   return _udp.listen(_port);
@@ -86,7 +100,7 @@ void DNSServer::_handleUDP(AsyncUDPPacket& pkt)
     // will reply with IP only to "*" or if doman matches without www. subdomain
     if (dnsHeader.OPCode == DNS_OPCODE_QUERY &&
         requestIncludesOnlyOneQuestion(dnsHeader) &&
-        (_domainName == "*" ||
+        (_domainName.isEmpty() ||
          getDomainNameWithoutWwwPrefix(static_cast<const unsigned char*>(dnsQuestion.QName), dnsQuestion.QNameLength) == _domainName)
        )
     {
@@ -152,13 +166,14 @@ void DNSServer::replyWithIP(AsyncUDPPacket& req, DNSHeader& dnsHeader, DNSQuesti
   rpl.write((unsigned char*) &answerClass, 2 );
   rpl.write((unsigned char*) &_ttl, 4);        // DNS Time To Live
   rpl.write((unsigned char*) &answerIPv4, 2 );
-  rpl.write(_resolvedIP, sizeof(_resolvedIP)); // The IP address to return
+  uint32_t ip = _resolvedIP;
+  rpl.write(reinterpret_cast<uint8_t*>(&ip), sizeof(uint32_t)); // The IPv4 address to return
 
   _udp.sendTo(rpl, req.remoteIP(), req.remotePort());
 
   #ifdef DEBUG_ESP_DNS
     DEBUG_OUTPUT.printf("DNS responds: %s for %s\n",
-            IPAddress(_resolvedIP).toString().c_str(), getDomainNameWithoutWwwPrefix(static_cast<const unsigned char*>(dnsQuestion.QName), dnsQuestion.QNameLength).c_str() );
+            _resolvedIP.toString().c_str(), getDomainNameWithoutWwwPrefix(static_cast<const unsigned char*>(dnsQuestion.QName), dnsQuestion.QNameLength).c_str() );
   #endif  
 }
 
