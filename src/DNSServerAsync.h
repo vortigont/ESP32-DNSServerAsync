@@ -107,6 +107,15 @@ class DNSServer
     // stops the DNS server
     void stop();
 
+    /**
+     * @brief returns true if DNS server runs in captive-portal mode
+     * i.e. all requests are served with AP's ip address
+     * 
+     * @return true if catch-all mode active
+     * @return false otherwise
+     */
+    bool isCaptive() const { return _domainName.isEmpty(); };
+
   private:
     AsyncUDP _udp;
     uint16_t _port;
